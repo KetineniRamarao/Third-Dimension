@@ -1,0 +1,2437 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Logo Material Studio</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Inter -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Three.js r128 & OrbitControls -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      margin: 0;
+      overflow: hidden;
+      background-color: #090a0f;
+      color: #f3f4f6;
+      user-select: none;
+    }
+    /* Custom Scrollbar for Sidebar */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(17, 24, 39, 0.4);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(75, 85, 99, 0.6);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(156, 163, 175, 0.8);
+    }
+    /* Checkerboard pattern for transparent mode */
+    .bg-checkerboard {
+      background-image: 
+        linear-gradient(45deg, #18181b 25%, transparent 25%), 
+        linear-gradient(-45deg, #18181b 25%, transparent 25%), 
+        linear-gradient(45deg, transparent 75%, #18181b 75%), 
+        linear-gradient(-45deg, transparent 75%, #18181b 75%);
+      background-size: 24px 24px;
+      background-position: 0 0, 0 12px, 12px -12px, -12px 0px;
+      background-color: #09090b;
+    }
+    .bg-studio-dark {
+      background: radial-gradient(circle at 50% 45%, #1e2230 0%, #090a0f 100%);
+    }
+    .bg-studio-light {
+      background: radial-gradient(circle at 50% 45%, #ffffff 0%, #cbd5e1 100%);
+    }
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-runnable-track {
+      background: #27272a;
+      height: 6px;
+      border-radius: 999px;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      margin-top: -5px;
+      background-color: #6366f1;
+      height: 16px;
+      width: 16px;
+      border-radius: 999px;
+      border: 2px solid #e0e7ff;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+      transition: transform 0.15s ease, background-color 0.15s ease;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+      background-color: #818cf8;
+    }
+  </style>
+</head>
+<body class="relative w-screen h-screen overflow-hidden flex">
+
+  <!-- 3D Viewport Container -->
+  <div id="viewport-container" class="relative flex-1 h-full bg-studio-dark transition-colors duration-300">
+    <canvas id="three-canvas" class="w-full h-full block cursor-grab active:cursor-grabbing"></canvas>
+
+    <!-- Top Floating Header / Status Bar -->
+    <div class="absolute top-4 left-4 right-4 md:right-auto flex flex-wrap items-center gap-3 pointer-events-none z-10">
+      <div class="pointer-events-auto flex items-center gap-2.5 bg-zinc-900/85 backdrop-blur-md border border-zinc-800/80 px-4 py-2.5 rounded-2xl shadow-2xl">
+        <div class="w-3 h-3 rounded-full bg-indigo-500 animate-pulse"></div>
+        <span class="font-bold text-sm tracking-tight text-white">Prismatic 3D</span>
+        <span class="text-xs px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-medium">Adaptive PBR</span>
+      </div>
+
+      <!-- Detected Logo Palette Pill -->
+      <div id="palette-container" class="pointer-events-auto flex items-center gap-2 bg-zinc-900/85 backdrop-blur-md border border-zinc-800/80 px-3.5 py-2 rounded-2xl shadow-xl">
+        <span class="text-[11px] uppercase tracking-wider text-zinc-400 font-semibold mr-1">Logo Colors</span>
+        <div id="palette-swatches" class="flex items-center gap-1.5"></div>
+      </div>
+
+      <!-- Retina Hi-DPI Super-Sampling Toggle -->
+      <div class="pointer-events-auto flex items-center bg-zinc-900/85 backdrop-blur-md border border-zinc-800/80 p-1 rounded-2xl shadow-xl gap-1">
+        <span class="text-[10px] uppercase tracking-wider text-zinc-400 font-semibold px-2">Render Quality</span>
+        <button id="ssaa-1x-btn" onclick="setSuperSampling(1)" class="px-2 py-1 rounded-xl text-[11px] font-medium text-zinc-400 hover:text-white transition">1x</button>
+        <button id="ssaa-2x-btn" onclick="setSuperSampling(2)" class="px-2 py-1 rounded-xl text-[11px] font-medium bg-indigo-600 text-white transition">2x Retina</button>
+        <button id="ssaa-3x-btn" onclick="setSuperSampling(3)" class="px-2 py-1 rounded-xl text-[11px] font-medium text-zinc-400 hover:text-white transition">3x Ultra</button>
+      </div>
+    </div>
+
+    <!-- Bottom Left Quick Camera & Background Bar -->
+    <div class="absolute bottom-5 left-5 flex flex-wrap items-center gap-2 z-10">
+      <div class="flex items-center bg-zinc-900/85 backdrop-blur-md border border-zinc-800/80 p-1.5 rounded-xl shadow-xl gap-1">
+        <button id="bg-dark-btn" onclick="setBackgroundMode('dark')" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-indigo-600 text-white transition">Dark</button>
+        <button id="bg-light-btn" onclick="setBackgroundMode('light')" class="px-2.5 py-1.5 rounded-lg text-xs font-medium text-zinc-400 hover:text-white transition">Light</button>
+        <button id="bg-trans-btn" onclick="setBackgroundMode('transparent')" class="px-2.5 py-1.5 rounded-lg text-xs font-medium text-zinc-400 hover:text-white transition">Alpha Grid</button>
+      </div>
+
+      <button id="autorotate-btn" onclick="toggleAutoRotate()" class="flex items-center gap-2 bg-zinc-900/85 backdrop-blur-md border border-zinc-800/80 px-3.5 py-2 rounded-xl text-xs font-medium text-indigo-300 hover:bg-zinc-800/90 transition shadow-xl">
+        <svg class="w-4 h-4 animate-spin" style="animation-duration: 6s;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+        </svg>
+        <span>Turntable: ON</span>
+      </button>
+
+      <button onclick="resetCameraView()" class="bg-zinc-900/85 backdrop-blur-md border border-zinc-800/80 px-3 py-2 rounded-xl text-xs font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition shadow-xl">
+        Reset Camera
+      </button>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="hidden absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-30">
+      <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 flex flex-col items-center gap-3 shadow-2xl">
+        <div class="w-9 h-9 border-3 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+        <p id="loading-text" class="text-sm font-medium text-zinc-200">Segmenting Colors & Extruding 3D Mesh...</p>
+      </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast-box" class="pointer-events-none opacity-0 transition-opacity duration-300 absolute top-16 left-1/2 -translate-x-1/2 bg-zinc-900/95 border border-indigo-500/40 text-zinc-100 px-4 py-2 rounded-xl text-xs font-medium shadow-2xl z-40">
+      Snapshot exported!
+    </div>
+  </div>
+
+  <!-- Right Floating Studio Sidebar -->
+  <aside class="w-full sm:w-[370px] md:w-[390px] h-full bg-zinc-950/95 backdrop-blur-xl border-l border-zinc-800/80 flex flex-col z-20 overflow-y-auto">
+    
+    <!-- Sidebar Header -->
+    <div class="p-4 border-b border-zinc-800/80 flex items-center justify-between">
+      <div>
+        <h1 class="text-sm font-bold text-white tracking-wide">3D LOGO GENERATOR</h1>
+        <p class="text-[11px] text-zinc-400">Color-Adaptive Extrusion & PBR Materials</p>
+      </div>
+      <button onclick="exportPNGSnapshot()" class="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white text-xs font-semibold px-3.5 py-2 rounded-xl shadow-lg shadow-indigo-600/25 transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+        <span>Export PNG</span>
+      </button>
+    </div>
+
+    <div class="p-4 space-y-5 flex-1">
+
+      <!-- 1. UPLOAD & SAMPLE LOGOS -->
+      <section class="space-y-2.5">
+        <div class="flex items-center justify-between">
+          <label class="text-xs font-semibold uppercase tracking-wider text-zinc-400">1. Logo Source</label>
+          <span class="text-[11px] text-zinc-500">PNG, SVG, JPG</span>
+        </div>
+
+        <!-- Drag & Drop Zone -->
+        <label id="drop-zone" for="logo-upload-input" class="group relative flex flex-col items-center justify-center border-2 border-dashed border-zinc-700/80 hover:border-indigo-500 bg-zinc-900/50 hover:bg-indigo-950/20 rounded-2xl p-4 cursor-pointer transition text-center">
+          <input id="logo-upload-input" type="file" accept="image/png,image/svg+xml,image/jpeg,image/webp" class="hidden" />
+          <div class="w-9 h-9 rounded-xl bg-zinc-800 group-hover:bg-indigo-600/20 text-zinc-300 group-hover:text-indigo-400 flex items-center justify-center mb-1.5 transition">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+          </div>
+          <span class="text-xs font-medium text-zinc-200 group-hover:text-white">Drop your logo here or <span class="text-indigo-400 underline">browse</span></span>
+          <span class="text-[11px] text-zinc-500 mt-0.5">Auto-removes solid backgrounds & extracts colors</span>
+        </label>
+
+        <!-- Sample Multi-Color Logos -->
+        <div class="pt-1">
+          <span class="text-[11px] text-zinc-400 block mb-2">Or test with multi-color presets:</span>
+          <div class="grid grid-cols-4 gap-2" id="sample-logos-grid">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. MATERIAL PRESETS -->
+      <section class="space-y-2.5 pt-2 border-t border-zinc-800/80">
+        <div class="flex items-center justify-between">
+          <label class="text-xs font-semibold uppercase tracking-wider text-zinc-400">2. Adaptive Material</label>
+          <span id="active-material-badge" class="text-[11px] text-indigo-400 font-medium">Woven Denim</span>
+        </div>
+
+        <!-- Material Category Filter Tabs -->
+        <div class="grid grid-cols-3 gap-1 bg-zinc-900 p-1 rounded-xl border border-zinc-800">
+          <button id="cat-all-btn" onclick="setMaterialCategory('all')" class="py-1 px-2 rounded-lg text-[11px] font-medium text-zinc-400 hover:text-white transition">
+            All (11)
+          </button>
+          <button id="cat-matte-btn" onclick="setMaterialCategory('matte')" class="py-1 px-2 rounded-lg text-[11px] font-medium bg-indigo-600 text-white transition">
+            Matte &amp; Fabric
+          </button>
+          <button id="cat-studio-btn" onclick="setMaterialCategory('studio')" class="py-1 px-2 rounded-lg text-[11px] font-medium text-zinc-400 hover:text-white transition">
+            Gloss &amp; Metal
+          </button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 max-h-[230px] overflow-y-auto pr-1" id="material-presets-grid">
+          <!-- Populated by JS -->
+        </div>
+
+        <!-- Color Adaptation & Micro-Texture Controls -->
+        <div class="bg-zinc-900/70 border border-zinc-800/80 rounded-xl p-3 space-y-3 mt-2">
+          <!-- Color Adaptation Blend Slider -->
+          <div class="space-y-1.5">
+            <div class="flex justify-between items-center">
+              <span class="text-xs font-medium text-zinc-200">Logo Color Adaptation</span>
+              <span id="color-blend-val" class="text-xs font-semibold text-indigo-400">85%</span>
+            </div>
+            <input id="color-blend-slider" type="range" min="0" max="100" value="85" class="w-full" />
+            <div class="flex justify-between text-[10px] text-zinc-500">
+              <span>0% Pure Base Material</span>
+              <span>100% Logo Color Driven</span>
+            </div>
+          </div>
+
+          <!-- Tactile Weave / Grain Controls -->
+          <div id="tactile-controls-group" class="pt-2.5 border-t border-zinc-800/80 space-y-2.5">
+            <div class="space-y-1">
+              <div class="flex justify-between items-center text-xs">
+                <span class="text-zinc-300">Weave / Grain Scale</span>
+                <span id="tex-scale-val" class="text-indigo-400 font-mono text-[11px]">1.0x</span>
+              </div>
+              <input id="tex-scale-slider" type="range" min="0.4" max="3.0" step="0.1" value="1.0" class="w-full" />
+            </div>
+
+            <div class="space-y-1">
+              <div class="flex justify-between items-center text-xs">
+                <span class="text-zinc-300">Tactile Bump Depth</span>
+                <span id="bump-int-val" class="text-indigo-400 font-mono text-[11px]">100%</span>
+              </div>
+              <input id="bump-int-slider" type="range" min="0" max="200" step="5" value="100" class="w-full" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. 3D GEOMETRY & EXTRUSION -->
+      <section class="space-y-3 pt-2 border-t border-zinc-800/80">
+        <div class="flex items-center justify-between">
+          <label class="text-xs font-semibold uppercase tracking-wider text-zinc-400">3. Smooth Vector 3D Geometry</label>
+        </div>
+
+        <!-- Geometry Mode Selector -->
+        <div class="grid grid-cols-2 gap-1.5 bg-zinc-900 p-1 rounded-xl border border-zinc-800">
+          <button id="mode-segmented-btn" onclick="setGeometryMode('segmented')" class="py-1.5 px-2 rounded-lg text-xs font-medium bg-indigo-600 text-white transition">
+            Smooth Vector Extrude
+          </button>
+          <button id="mode-relief-btn" onclick="setGeometryMode('relief')" class="py-1.5 px-2 rounded-lg text-xs font-medium text-zinc-400 hover:text-white transition">
+            Layered SDF Relief
+          </button>
+        </div>
+
+        <!-- Mesh Resolution / Edge Smoothness Tier -->
+        <div class="space-y-1">
+          <div class="flex justify-between text-xs">
+            <span class="text-zinc-300">Mesh Resolution &amp; Curve Smoothness</span>
+            <span id="res-val" class="text-indigo-400 font-semibold">Ultra Smooth</span>
+          </div>
+          <div class="grid grid-cols-3 gap-1 bg-zinc-900 p-1 rounded-xl border border-zinc-800">
+            <button id="quality-std-btn" onclick="setMeshQualityTier('standard')" class="py-1 px-2 rounded-lg text-[11px] font-medium text-zinc-400 hover:text-white transition">
+              Standard
+            </button>
+            <button id="quality-high-btn" onclick="setMeshQualityTier('high')" class="py-1 px-2 rounded-lg text-[11px] font-medium text-zinc-400 hover:text-white transition">
+              High
+            </button>
+            <button id="quality-ultra-btn" onclick="setMeshQualityTier('ultra')" class="py-1 px-2 rounded-lg text-[11px] font-medium bg-indigo-600 text-white transition">
+              Ultra Smooth
+            </button>
+          </div>
+        </div>
+
+        <!-- Extrusion Depth -->
+        <div class="space-y-1">
+          <div class="flex justify-between text-xs">
+            <span class="text-zinc-300">Extrusion Depth</span>
+            <span id="depth-val" class="text-zinc-400 font-mono">1.00x</span>
+          </div>
+          <input id="depth-slider" type="range" min="0.2" max="2.5" step="0.05" value="1.0" class="w-full" />
+        </div>
+
+        <!-- Bevel / Edge Softness -->
+        <div class="space-y-1">
+          <div class="flex justify-between text-xs">
+            <span class="text-zinc-300">Contour Bevel &amp; Fillet</span>
+            <span id="bevel-val" class="text-zinc-400 font-mono">Smooth Chamfer</span>
+          </div>
+          <input id="bevel-slider" type="range" min="0" max="100" step="5" value="60" class="w-full" />
+        </div>
+      </section>
+
+      <!-- 4. STUDIO LIGHTING ENVIRONMENT -->
+      <section class="space-y-2.5 pt-2 border-t border-zinc-800/80">
+        <label class="text-xs font-semibold uppercase tracking-wider text-zinc-400 block">4. Studio Lighting Rig</label>
+        <div class="grid grid-cols-2 gap-2" id="lighting-presets-grid">
+          <!-- Populated by JS -->
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Footer Tip -->
+    <div class="p-3 border-t border-zinc-900 text-center text-[11px] text-zinc-500">
+      Left-click + drag to orbit • Scroll to zoom • Right-click to pan
+    </div>
+  </aside>
+
+  <script>
+    /********************************************************************
+     * 1. BUILT-IN MULTI-COLOR SAMPLE LOGOS (SVG Data Generators)
+     ********************************************************************/
+    const SAMPLE_LOGOS = [
+      {
+        id: 'nexus',
+        name: 'Nexus Prism',
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+          <polygon points="128,20 225,75 128,130 31,75" fill="#38bdf8"/>
+          <polygon points="31,75 128,130 128,236 31,180" fill="#6366f1"/>
+          <polygon points="225,75 225,180 128,236 128,130" fill="#f43f5e"/>
+          <polygon points="128,56 185,88 128,120 71,88" fill="#fde047"/>
+        </svg>`
+      },
+      {
+        id: 'orbit',
+        name: 'Flame Wing',
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+          <circle cx="128" cy="128" r="98" fill="#1e1b4b"/>
+          <path d="M128,38 C175,65 198,125 162,178 C145,202 105,212 78,190 C115,185 138,148 122,112 C110,85 105,62 128,38 Z" fill="#fb7185"/>
+          <path d="M112,72 C148,95 160,140 132,178 C102,215 52,178 62,130 C68,98 92,88 112,72 Z" fill="#fb923c"/>
+          <circle cx="114" cy="146" r="28" fill="#fef08a"/>
+        </svg>`
+      },
+      {
+        id: 'synth',
+        name: 'Arcade Star',
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+          <rect x="34" y="34" width="188" height="188" rx="46" fill="#10b981"/>
+          <rect x="62" y="62" width="132" height="132" rx="30" fill="#06b6d4"/>
+          <polygon points="128,68 145,108 188,112 155,140 165,182 128,160 91,182 101,140 68,112 111,108" fill="#facc15"/>
+          <circle cx="128" cy="130" r="18" fill="#ec4899"/>
+        </svg>`
+      },
+      {
+        id: 'infinity',
+        name: 'Eco Petal',
+        svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+          <circle cx="92" cy="92" r="56" fill="#a855f7"/>
+          <circle cx="164" cy="92" r="56" fill="#ec4899"/>
+          <circle cx="92" cy="164" r="56" fill="#3b82f6"/>
+          <circle cx="164" cy="164" r="56" fill="#22c55e"/>
+          <circle cx="128" cy="128" r="36" fill="#f97316"/>
+        </svg>`
+      }
+    ];
+
+    /********************************************************************
+     * 2. MATERIAL PRESETS & LIGHTING RIG DEFINITIONS
+     ********************************************************************/
+    const MATERIAL_PRESETS = [
+      // TACTILE MATTE & FABRIC PRESETS
+      {
+        id: 'denim',
+        category: 'matte',
+        name: 'Woven Denim',
+        desc: 'Diagonal twill weave with dyed cotton & white weft threads',
+        iconColor: 'from-blue-600 to-indigo-900',
+        hasMicroTexture: true
+      },
+      {
+        id: 'linen',
+        category: 'matte',
+        name: 'Linen / Cloth',
+        desc: 'Crisp cross-hatch woven canvas fabric with soft matte scatter',
+        iconColor: 'from-amber-200 to-stone-500',
+        hasMicroTexture: true
+      },
+      {
+        id: 'leather',
+        category: 'matte',
+        name: 'Pebbled Leather',
+        desc: 'Supple organic cellular hide grain with rich dyed finish',
+        iconColor: 'from-amber-700 to-stone-900',
+        hasMicroTexture: true
+      },
+      {
+        id: 'suede',
+        category: 'matte',
+        name: 'Brushed Suede',
+        desc: 'Ultra-matte fibrous micro-nap felt with velvety rim sheen',
+        iconColor: 'from-rose-500 to-purple-900',
+        hasMicroTexture: true
+      },
+      {
+        id: 'concrete',
+        category: 'matte',
+        name: 'Matte Concrete',
+        desc: 'Architectural speckled porous stone with mineral grit',
+        iconColor: 'from-zinc-400 to-zinc-700',
+        hasMicroTexture: true
+      },
+      {
+        id: 'clay',
+        category: 'matte',
+        name: 'Soft-Touch Clay',
+        desc: 'Velvety matte pastel-adapted polymer clay finish',
+        iconColor: 'from-emerald-400 to-teal-600',
+        hasMicroTexture: false
+      },
+      // STUDIO GLOSS & METALLIC PRESETS
+      {
+        id: 'anodized',
+        category: 'studio',
+        name: 'Anodized Metal',
+        desc: 'Brushed metallic sheen tinted by logo colors',
+        iconColor: 'from-sky-400 to-indigo-600',
+        hasMicroTexture: false
+      },
+      {
+        id: 'acrylic',
+        category: 'studio',
+        name: 'Frosted Glass',
+        desc: 'Translucent refractive acrylic with tinted depth',
+        iconColor: 'from-cyan-300 to-blue-500',
+        hasMicroTexture: false
+      },
+      {
+        id: 'enamel',
+        category: 'studio',
+        name: 'Glossy Ceramic',
+        desc: 'Rich saturated porcelain with clearcoat glaze',
+        iconColor: 'from-rose-400 to-orange-500',
+        hasMicroTexture: false
+      },
+      {
+        id: 'neon',
+        category: 'studio',
+        name: 'Cyber Neon',
+        desc: 'Luminous emissive core driven by logo hues',
+        iconColor: 'from-fuchsia-500 to-purple-600',
+        hasMicroTexture: false
+      },
+      {
+        id: 'goldfoil',
+        category: 'studio',
+        name: 'Luxe Gold & Chrome',
+        desc: 'Maps logo luminance into gold, rose & silver foil',
+        iconColor: 'from-amber-300 to-yellow-600',
+        hasMicroTexture: false
+      }
+    ];
+
+    const LIGHTING_PRESETS = [
+      {
+        id: 'studio',
+        name: 'Studio Softbox',
+        keyColor: 0xffffff, keyIntensity: 2.2,
+        fillColor: 0x93c5fd, fillIntensity: 1.2,
+        rimColor: 0xe0e7ff, rimIntensity: 1.6,
+        ambientColor: 0x475569, ambientIntensity: 0.9
+      },
+      {
+        id: 'sunset',
+        name: 'Warm Sunset',
+        keyColor: 0xffedd5, keyIntensity: 2.5,
+        fillColor: 0xf97316, fillIntensity: 1.5,
+        rimColor: 0xc084fc, rimIntensity: 1.8,
+        ambientColor: 0x431407, ambientIntensity: 0.8
+      },
+      {
+        id: 'cyber',
+        name: 'Cyberpunk Rim',
+        keyColor: 0x38bdf8, keyIntensity: 2.4,
+        fillColor: 0xf43f5e, fillIntensity: 1.9,
+        rimColor: 0xa855f7, rimIntensity: 2.4,
+        ambientColor: 0x1e1b4b, ambientIntensity: 0.7
+      },
+      {
+        id: 'dramatic',
+        name: 'High-Contrast Noir',
+        keyColor: 0xffffff, keyIntensity: 3.1,
+        fillColor: 0x334155, fillIntensity: 0.5,
+        rimColor: 0xfacc15, rimIntensity: 2.2,
+        ambientColor: 0x0f172a, ambientIntensity: 0.4
+      }
+    ];
+
+    /********************************************************************
+     * 3. APPLICATION STATE
+     ********************************************************************/
+    const state = {
+      currentImage: null,
+      activeSampleId: 'nexus',
+      materialCategory: 'matte', // 'all' | 'matte' | 'studio'
+      materialId: 'denim',
+      colorBlend: 0.85,          // 0.0 to 1.0
+      textureScale: 1.0,         // 0.4 to 3.0 weave/grain scale
+      bumpIntensity: 1.0,        // 0.0 to 2.0 tactile relief intensity
+      geometryMode: 'segmented', // 'segmented' | 'relief'
+      extrusionDepth: 1.0,
+      bevelSoftness: 60,         // 0 to 100
+      meshQuality: 'ultra',      // 'standard' | 'high' | 'ultra'
+      gridResolution: 240,       // High-res SDF contour sampling grid
+      superSampling: 2,          // 1 | 2 | 3
+      lightingId: 'studio',
+      backgroundMode: 'dark',    // 'dark' | 'light' | 'transparent'
+      autoRotate: true,
+      extractedClusters: []      // Holds quantized color clusters + smooth vector contours
+    };
+
+    // Cache for high-DPI 1024x1024 tangent-space normal, roughness & albedo maps
+    const proceduralTextures = {};
+
+    /********************************************************************
+     * 4. THREE.JS SCENE INITIALIZATION
+     ********************************************************************/
+    let scene, camera, renderer, controls, logoGroup;
+    let keyLight, fillLight, rimLight, bottomLight, ambientLight;
+    let envMapTexture = null;
+
+    function initThreeScene() {
+      const canvas = document.getElementById('three-canvas');
+      const container = document.getElementById('viewport-container');
+
+      scene = new THREE.Scene();
+
+      camera = new THREE.PerspectiveCamera(
+        36,
+        container.clientWidth / container.clientHeight,
+        0.1,
+        1000
+      );
+      camera.position.set(0, 0, 13.0);
+
+      renderer = new THREE.WebGLRenderer({
+        canvas,
+        antialias: true,
+        alpha: true,
+        powerPreference: 'high-performance',
+        preserveDrawingBuffer: true
+      });
+      renderer.setSize(container.clientWidth, container.clientHeight);
+      const targetPixelRatio = Math.min((window.devicePixelRatio || 1) * 1.5, 3);
+      renderer.setPixelRatio(targetPixelRatio);
+      renderer.physicallyCorrectLights = true;
+      renderer.outputEncoding = THREE.sRGBEncoding;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.15;
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.06;
+      controls.maxDistance = 30;
+      controls.minDistance = 3.5;
+
+      // Generate high-res procedural studio reflection environment map
+      envMapTexture = createProceduralStudioEnvMap();
+      scene.environment = envMapTexture;
+
+      // Pre-build 1024x1024 Tangent-Space Normal & Albedo textures with max anisotropy
+      initProceduralMicroTextures();
+
+      // Setup Lights
+      ambientLight = new THREE.AmbientLight(0x475569, 0.95);
+      scene.add(ambientLight);
+
+      keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
+      keyLight.position.set(7, 10, 9);
+      keyLight.castShadow = true;
+      keyLight.shadow.mapSize.width = 2048;
+      keyLight.shadow.mapSize.height = 2048;
+      keyLight.shadow.bias = -0.0005;
+      scene.add(keyLight);
+
+      fillLight = new THREE.DirectionalLight(0x93c5fd, 1.25);
+      fillLight.position.set(-9, 3, 6);
+      scene.add(fillLight);
+
+      rimLight = new THREE.DirectionalLight(0xe0e7ff, 1.6);
+      rimLight.position.set(0, -8, -8);
+      scene.add(rimLight);
+
+      bottomLight = new THREE.PointLight(0x6366f1, 0.9, 25);
+      bottomLight.position.set(0, -6, 5);
+      scene.add(bottomLight);
+
+      // Group for 3D logo mesh layers
+      logoGroup = new THREE.Group();
+      scene.add(logoGroup);
+
+      window.addEventListener('resize', onWindowResize);
+      animateLoop();
+    }
+
+    function setSuperSampling(level) {
+      state.superSampling = level;
+      const baseDPR = window.devicePixelRatio || 1;
+      const ratio = level === 1 ? 1 : level === 2 ? Math.min(baseDPR * 1.5, 2.5) : Math.min(baseDPR * 2.2, 3.0);
+      renderer.setPixelRatio(ratio);
+      onWindowResize();
+
+      [1, 2, 3].forEach(k => {
+        const btn = document.getElementById(`ssaa-${k}x-btn`);
+        if (!btn) return;
+        if (k === level) {
+          btn.className = 'px-2 py-1 rounded-xl text-[11px] font-medium bg-indigo-600 text-white transition';
+        } else {
+          btn.className = 'px-2 py-1 rounded-xl text-[11px] font-medium text-zinc-400 hover:text-white transition';
+        }
+      });
+    }
+
+    /**
+     * Creates a high-resolution 1024x512 procedural Studio Softbox Equirectangular Environment Texture
+     * with smooth gradients and specular softboxes.
+     */
+    function createProceduralStudioEnvMap() {
+      const envCanvas = document.createElement('canvas');
+      envCanvas.width = 1024;
+      envCanvas.height = 512;
+      const ctx = envCanvas.getContext('2d');
+
+      const bgGrad = ctx.createLinearGradient(0, 0, 0, 512);
+      bgGrad.addColorStop(0, '#1e293b');
+      bgGrad.addColorStop(0.5, '#0f172a');
+      bgGrad.addColorStop(1, '#020617');
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, 1024, 512);
+
+      const drawSoftbox = (x, y, w, h, color, alpha) => {
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        const g = ctx.createRadialGradient(x + w / 2, y + h / 2, 8, x + w / 2, y + h / 2, Math.max(w, h) / 1.3);
+        g.addColorStop(0, color);
+        g.addColorStop(1, 'transparent');
+        ctx.fillStyle = g;
+        ctx.fillRect(x, y, w, h);
+        ctx.restore();
+      };
+
+      drawSoftbox(120, 40, 320, 160, '#ffffff', 0.95);
+      drawSoftbox(580, 80, 360, 190, '#e0e7ff', 0.85);
+      drawSoftbox(280, 280, 440, 140, '#38bdf8', 0.45);
+      drawSoftbox(40, 220, 220, 180, '#f43f5e', 0.35);
+
+      const texture = new THREE.CanvasTexture(envCanvas);
+      texture.mapping = THREE.EquirectangularReflectionMapping;
+      texture.encoding = THREE.sRGBEncoding;
+      texture.minFilter = THREE.LinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      return texture;
+    }
+
+    /**
+     * Smooth 2D Bicubic / Hermite interpolated value noise helper
+     * Eliminates blocky pixel-level white noise so all fabrics and grains are silky smooth.
+     */
+    function createSmoothNoise2D(gridSize = 64, seed = 1337) {
+      const table = new Float32Array(gridSize * gridSize);
+      let s = seed;
+      for (let i = 0; i < table.length; i++) {
+        s = (s * 1664525 + 1013904223) % 4294967296;
+        table[i] = (s / 4294967296) * 2 - 1;
+      }
+
+      const smoothstep = t => t * t * (3 - 2 * t);
+
+      return function sample(u, v, freq) {
+        const x = ((u * freq) % gridSize + gridSize) % gridSize;
+        const y = ((v * freq) % gridSize + gridSize) % gridSize;
+        const x0 = Math.floor(x);
+        const y0 = Math.floor(y);
+        const x1 = (x0 + 1) % gridSize;
+        const y1 = (y0 + 1) % gridSize;
+        const sx = smoothstep(x - x0);
+        const sy = smoothstep(y - y0);
+
+        const n00 = table[y0 * gridSize + x0];
+        const n10 = table[y0 * gridSize + x1];
+        const n01 = table[y1 * gridSize + x0];
+        const n11 = table[y1 * gridSize + x1];
+
+        const ix0 = n00 + sx * (n10 - n00);
+        const ix1 = n01 + sx * (n11 - n01);
+        return ix0 + sy * (ix1 - ix0);
+      };
+    }
+
+    /**
+     * Converts a floating-point heightfield (size x size) into a smooth 24-bit
+     * Tangent-Space Normal Map (RGB) + Roughness Map using Sobel 3x3 derivatives.
+     * This completely eliminates 8-bit bump map stair-stepping!
+     */
+    function heightFieldToNormalCanvas(heightField, size, strength = 2.5) {
+      const normCanvas = document.createElement('canvas');
+      normCanvas.width = size;
+      normCanvas.height = size;
+      const ctx = normCanvas.getContext('2d');
+      const img = ctx.createImageData(size, size);
+      const data = img.data;
+
+      for (let y = 0; y < size; y++) {
+        const ym1 = (y - 1 + size) % size;
+        const yp1 = (y + 1) % size;
+        for (let x = 0; x < size; x++) {
+          const xm1 = (x - 1 + size) % size;
+          const xp1 = (x + 1) % size;
+
+          // 3x3 Sobel filter across seamless edges
+          const tl = heightField[ym1 * size + xm1];
+          const tc = heightField[ym1 * size + x];
+          const tr = heightField[ym1 * size + xp1];
+          const ml = heightField[y * size + xm1];
+          const mr = heightField[y * size + xp1];
+          const bl = heightField[yp1 * size + xm1];
+          const bc = heightField[yp1 * size + x];
+          const br = heightField[yp1 * size + xp1];
+
+          const dX = ((tr + 2 * mr + br) - (tl + 2 * ml + bl)) * strength;
+          const dY = ((bl + 2 * bc + br) - (tl + 2 * tc + tr)) * strength;
+          const dZ = 1.0;
+
+          const invLen = 1.0 / Math.sqrt(dX * dX + dY * dY + dZ * dZ);
+          const nx = (-dX * invLen) * 0.5 + 0.5;
+          const ny = (-dY * invLen) * 0.5 + 0.5;
+          const nz = (dZ * invLen) * 0.5 + 0.5;
+
+          const idx = (y * size + x) * 4;
+          data[idx] = Math.max(0, Math.min(255, Math.round(nx * 255)));
+          data[idx + 1] = Math.max(0, Math.min(255, Math.round(ny * 255)));
+          data[idx + 2] = Math.max(0, Math.min(255, Math.round(nz * 255)));
+          data[idx + 3] = 255;
+        }
+      }
+      ctx.putImageData(img, 0, 0);
+      return normCanvas;
+    }
+
+    /**
+     * Generates high-resolution 1024x1024 seamless procedural Tangent-Space Normal Maps
+     * and Albedo/Roughness maps with Trilinear Mipmapping + 16x Anisotropy.
+     */
+    function initProceduralMicroTextures() {
+      const size = 1024;
+      const maxAniso = renderer ? renderer.capabilities.getMaxAnisotropy() : 16;
+      const noiseA = createSmoothNoise2D(128, 101);
+      const noiseB = createSmoothNoise2D(128, 709);
+
+      const configureHiResTexture = (canvas, isColor = false) => {
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.generateMipmaps = true;
+        tex.minFilter = THREE.LinearMipmapLinearFilter;
+        tex.magFilter = THREE.LinearFilter;
+        tex.anisotropy = maxAniso;
+        const baseRepeat = 1.55 / Math.max(0.25, state.textureScale);
+        tex.repeat.set(baseRepeat, baseRepeat);
+        if (isColor) tex.encoding = THREE.sRGBEncoding;
+        return tex;
+      };
+
+      // 1. WOVEN DENIM (High-DPI 2/1 Diagonal Twill Weave + Continuous Yarn Twist)
+      {
+        const heightField = new Float32Array(size * size);
+        const colorCanvas = document.createElement('canvas');
+        colorCanvas.width = size;
+        colorCanvas.height = size;
+        const cCtx = colorCanvas.getContext('2d');
+        const cImg = cCtx.createImageData(size, size);
+
+        const threadsPerTile = 64;
+        for (let y = 0; y < size; y++) {
+          const v = y / size;
+          const slubY = noiseA(0.15, v, 8) * 0.12;
+          for (let x = 0; x < size; x++) {
+            const u = x / size;
+            const slubX = noiseB(u, 0.25, 8) * 0.10;
+            const fbm = noiseA(u, v, 24) * 0.08 + noiseB(u, v, 48) * 0.04;
+
+            const tx = u * threadsPerTile;
+            const ty = v * threadsPerTile;
+
+            // Smooth diagonal twill ridge + individual warp/weft yarn roundness
+            const twillAngle = (tx * 2 + ty * 3) * Math.PI * 2 / 3;
+            const twillWave = Math.sin(twillAngle);
+            const warpThread = Math.sin(tx * Math.PI * 2) * 0.5 + 0.5;
+            const weftThread = Math.sin(ty * Math.PI * 2) * 0.5 + 0.5;
+
+            const isWarpDominant = twillWave > -0.25;
+            const yarnHeight = isWarpDominant
+              ? (0.55 + warpThread * 0.35 + twillWave * 0.18)
+              : (0.35 + weftThread * 0.32 - twillWave * 0.12);
+
+            const h = yarnHeight + slubX + slubY + fbm;
+            heightField[y * size + x] = h;
+
+            // Indigo warp threads vs subtle bright cotton weft crossover peaks
+            const weftBrightness = !isWarpDominant ? Math.pow(weftThread, 1.6) * 48 : 0;
+            const baseShade = 192 + (yarnHeight - 0.5) * 65 + fbm * 45 + weftBrightness;
+            const cVal = Math.max(145, Math.min(255, Math.round(baseShade)));
+
+            const idx = (y * size + x) * 4;
+            cImg.data[idx] = cVal;
+            cImg.data[idx + 1] = cVal;
+            cImg.data[idx + 2] = Math.min(255, Math.round(cVal + weftBrightness * 0.35));
+            cImg.data[idx + 3] = 255;
+          }
+        }
+        cCtx.putImageData(cImg, 0, 0);
+        const normalCanvas = heightFieldToNormalCanvas(heightField, size, 3.2);
+        proceduralTextures.denim = {
+          normalMap: configureHiResTexture(normalCanvas, false),
+          map: configureHiResTexture(colorCanvas, true)
+        };
+      }
+
+      // 2. LINEN / CANVAS CLOTH (Smooth Orthogonal Woven Slub Threads)
+      {
+        const heightField = new Float32Array(size * size);
+        const colorCanvas = document.createElement('canvas');
+        colorCanvas.width = size;
+        colorCanvas.height = size;
+        const cCtx = colorCanvas.getContext('2d');
+        const cImg = cCtx.createImageData(size, size);
+
+        const threads = 56;
+        for (let y = 0; y < size; y++) {
+          const v = y / size;
+          const slubV = noiseA(0.3, v, 6) * 0.14;
+          for (let x = 0; x < size; x++) {
+            const u = x / size;
+            const slubU = noiseB(u, 0.4, 6) * 0.14;
+            const tx = u * threads;
+            const ty = v * threads;
+            const cellX = Math.floor(tx);
+            const cellY = Math.floor(ty);
+            const lx = tx - cellX;
+            const ly = ty - cellY;
+
+            const archX = Math.sin(lx * Math.PI);
+            const archY = Math.sin(ly * Math.PI);
+            const overUnder = (cellX + cellY) % 2 === 0;
+
+            const primary = overUnder ? archX * archY : archY * archX;
+            const weaveLift = overUnder ? Math.sin(lx * Math.PI) * 0.25 : Math.sin(ly * Math.PI) * 0.25;
+            const micro = noiseA(u, v, 32) * 0.06;
+
+            const h = primary * 0.65 + weaveLift + (overUnder ? slubU : slubV) + micro;
+            heightField[y * size + x] = h;
+
+            const shade = Math.max(168, Math.min(255, Math.round(188 + h * 62)));
+            const idx = (y * size + x) * 4;
+            cImg.data[idx] = shade;
+            cImg.data[idx + 1] = shade;
+            cImg.data[idx + 2] = shade;
+            cImg.data[idx + 3] = 255;
+          }
+        }
+        cCtx.putImageData(cImg, 0, 0);
+        const normalCanvas = heightFieldToNormalCanvas(heightField, size, 2.8);
+        proceduralTextures.linen = {
+          normalMap: configureHiResTexture(normalCanvas, false),
+          map: configureHiResTexture(colorCanvas, true)
+        };
+      }
+
+      // 3. PEBBLED MATTE LEATHER (Smooth Cellular Voronoi Hide + Supple Crease Valleys)
+      {
+        const heightField = new Float32Array(size * size);
+        const colorCanvas = document.createElement('canvas');
+        colorCanvas.width = size;
+        colorCanvas.height = size;
+        const cCtx = colorCanvas.getContext('2d');
+        const cImg = cCtx.createImageData(size, size);
+
+        const gridCount = 24;
+        const cellSpan = size / gridCount;
+        const seeds = [];
+        let s = 4242;
+        const rand = () => {
+          s = (s * 1664525 + 1013904223) % 4294967296;
+          return s / 4294967296;
+        };
+
+        for (let gy = 0; gy < gridCount; gy++) {
+          for (let gx = 0; gx < gridCount; gx++) {
+            seeds.push({
+              px: (gx + 0.16 + rand() * 0.68) * cellSpan,
+              py: (gy + 0.16 + rand() * 0.68) * cellSpan
+            });
+          }
+        }
+
+        for (let y = 0; y < size; y++) {
+          const v = y / size;
+          const cy = Math.floor(y / cellSpan);
+          for (let x = 0; x < size; x++) {
+            const u = x / size;
+            const cx = Math.floor(x / cellSpan);
+
+            // Domain warp coordinates slightly with smooth low-frequency noise for organic hide cells
+            const wx = x + noiseA(u, v, 6) * 8.5;
+            const wy = y + noiseB(u, v, 6) * 8.5;
+
+            let d1 = Infinity;
+            let d2 = Infinity;
+            for (let oy = -1; oy <= 1; oy++) {
+              for (let ox = -1; ox <= 1; ox++) {
+                const nx = (cx + ox + gridCount) % gridCount;
+                const ny = (cy + oy + gridCount) % gridCount;
+                const seed = seeds[ny * gridCount + nx];
+                const sx = seed.px + (cx + ox - nx) * cellSpan;
+                const sy = seed.py + (cy + oy - ny) * cellSpan;
+                const dist = Math.hypot(wx - sx, wy - sy);
+                if (dist < d1) {
+                  d2 = d1;
+                  d1 = dist;
+                } else if (dist < d2) {
+                  d2 = dist;
+                }
+              }
+            }
+
+            const borderDist = Math.max(0, (d2 - d1) / (cellSpan * 0.52));
+            // Smooth hermite dome profile
+            const t = Math.min(1, borderDist);
+            const pebbleDome = Math.pow(t * (2 - t), 0.55);
+            const microGrain = noiseA(u, v, 36) * 0.05;
+
+            const h = pebbleDome * 0.85 + microGrain;
+            heightField[y * size + x] = h;
+
+            const cShade = Math.max(158, Math.min(255, Math.round(176 + pebbleDome * 74 + microGrain * 30)));
+            const idx = (y * size + x) * 4;
+            cImg.data[idx] = cShade;
+            cImg.data[idx + 1] = cShade;
+            cImg.data[idx + 2] = cShade;
+            cImg.data[idx + 3] = 255;
+          }
+        }
+        cCtx.putImageData(cImg, 0, 0);
+        const normalCanvas = heightFieldToNormalCanvas(heightField, size, 3.6);
+        proceduralTextures.leather = {
+          normalMap: configureHiResTexture(normalCanvas, false),
+          map: configureHiResTexture(colorCanvas, true)
+        };
+      }
+
+      // 4. BRUSHED SUEDE / FELT (Multi-Octave Continuous Fibrous Micro-Nap)
+      {
+        const heightField = new Float32Array(size * size);
+        const colorCanvas = document.createElement('canvas');
+        colorCanvas.width = size;
+        colorCanvas.height = size;
+        const cCtx = colorCanvas.getContext('2d');
+        const cImg = cCtx.createImageData(size, size);
+
+        for (let y = 0; y < size; y++) {
+          const v = y / size;
+          for (let x = 0; x < size; x++) {
+            const u = x / size;
+            const brushSweep = noiseA(u * 0.6 + v * 0.25, v * 0.6 - u * 0.2, 5) * 0.35;
+            const mediumNap = noiseB(u, v, 24) * 0.22;
+            const fineNap = noiseA(u, v, 64) * 0.16;
+
+            const h = 0.5 + brushSweep + mediumNap + fineNap;
+            heightField[y * size + x] = h;
+
+            const napShade = Math.max(175, Math.min(255, Math.round(215 + (h - 0.5) * 68)));
+            const idx = (y * size + x) * 4;
+            cImg.data[idx] = napShade;
+            cImg.data[idx + 1] = napShade;
+            cImg.data[idx + 2] = napShade;
+            cImg.data[idx + 3] = 255;
+          }
+        }
+        cCtx.putImageData(cImg, 0, 0);
+        const normalCanvas = heightFieldToNormalCanvas(heightField, size, 2.4);
+        proceduralTextures.suede = {
+          normalMap: configureHiResTexture(normalCanvas, false),
+          map: configureHiResTexture(colorCanvas, true)
+        };
+      }
+
+      // 5. MATTE CONCRETE / ARCHITECTURAL STONE (Continuous Multi-Octave Mineral Surface)
+      {
+        const heightField = new Float32Array(size * size);
+        const colorCanvas = document.createElement('canvas');
+        colorCanvas.width = size;
+        colorCanvas.height = size;
+        const cCtx = colorCanvas.getContext('2d');
+        const cImg = cCtx.createImageData(size, size);
+
+        for (let y = 0; y < size; y++) {
+          const v = y / size;
+          for (let x = 0; x < size; x++) {
+            const u = x / size;
+            const macroStone = noiseA(u, v, 6) * 0.32;
+            const midMineral = noiseB(u, v, 18) * 0.22;
+            const finePore = noiseA(u, v, 48) * 0.18;
+            // Smooth mineral dimples where finePore dips low
+            const poreDip = finePore < -0.11 ? (finePore + 0.11) * 1.6 : 0;
+
+            const h = 0.5 + macroStone + midMineral + finePore + poreDip;
+            heightField[y * size + x] = h;
+
+            const stoneShade = Math.max(160, Math.min(255, Math.round(212 + (h - 0.5) * 65)));
+            const idx = (y * size + x) * 4;
+            cImg.data[idx] = stoneShade;
+            cImg.data[idx + 1] = stoneShade;
+            cImg.data[idx + 2] = stoneShade;
+            cImg.data[idx + 3] = 255;
+          }
+        }
+        cCtx.putImageData(cImg, 0, 0);
+        const normalCanvas = heightFieldToNormalCanvas(heightField, size, 3.0);
+        proceduralTextures.concrete = {
+          normalMap: configureHiResTexture(normalCanvas, false),
+          map: configureHiResTexture(colorCanvas, true)
+        };
+      }
+    }
+
+    /**
+     * Updates repeat tiling scale across all 1024x1024 procedural textures when the user adjusts Weave/Grain Scale.
+     */
+    function updateProceduralTextureRepeats() {
+      const repeatVal = 1.55 / Math.max(0.25, state.textureScale);
+      Object.values(proceduralTextures).forEach(texGroup => {
+        if (texGroup.normalMap) {
+          texGroup.normalMap.repeat.set(repeatVal, repeatVal);
+          texGroup.normalMap.needsUpdate = true;
+        }
+        if (texGroup.map) {
+          texGroup.map.repeat.set(repeatVal, repeatVal);
+          texGroup.map.needsUpdate = true;
+        }
+      });
+    }
+
+    /********************************************************************
+     * 5. IMAGE ANALYSIS, SUB-PIXEL SDF CONTOUR TRACING & SMOOTH 3D EXTRUSION
+     ********************************************************************/
+    function loadSampleLogo(sampleId) {
+      state.activeSampleId = sampleId;
+      highlightActiveSampleButton();
+      const sample = SAMPLE_LOGOS.find(s => s.id === sampleId);
+      if (!sample) return;
+
+      const svgBlob = new Blob([sample.svg], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(svgBlob);
+      loadImageFromUrl(url, () => URL.revokeObjectURL(url));
+    }
+
+    function loadImageFromUrl(url, onComplete) {
+      showLoading(true);
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        state.currentImage = img;
+        setTimeout(() => {
+          processLogoTo3D(img);
+          showLoading(false);
+          if (onComplete) onComplete();
+        }, 30);
+      };
+      img.onerror = () => {
+        showLoading(false);
+        showToast('Could not load image file. Please try another PNG/SVG/JPG.');
+      };
+      img.src = url;
+    }
+
+    /**
+     * High-Resolution Color Segmentation + Sub-Pixel SDF Contour Extraction:
+     * 1. Renders the logo onto a high-density sampling canvas (up to 256x256).
+     * 2. Removes uniform solid background automatically.
+     * 3. Quantizes foreground pixels into dominant color clusters.
+     * 4. For each color cluster, builds a Gaussian-smoothed Signed Distance Field (SDF),
+     *    traces sub-pixel Marching Squares contours, applies Laplacian + Chaikin Bezier smoothing,
+     *    organizes outer rings & inner holes, and generates smooth `THREE.ExtrudeGeometry` meshes.
+     */
+    function processLogoTo3D(img) {
+      if (!img) return;
+
+      const tierConfig = {
+        standard: { N: 140, smoothPasses: 3, chaikinPasses: 1, curveSegments: 12, bevelSegments: 4 },
+        high:     { N: 200, smoothPasses: 5, chaikinPasses: 2, curveSegments: 18, bevelSegments: 6 },
+        ultra:    { N: 256, smoothPasses: 7, chaikinPasses: 2, curveSegments: 24, bevelSegments: 8 }
+      }[state.meshQuality || 'ultra'];
+
+      const N = tierConfig.N;
+      state.gridResolution = N;
+
+      const offCanvas = document.createElement('canvas');
+      offCanvas.width = N;
+      offCanvas.height = N;
+      const ctx = offCanvas.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+
+      // Fit image inside N x N with clean margin for SDF smoothing
+      const pad = Math.round(N * 0.08);
+      const availW = N - pad * 2;
+      const availH = N - pad * 2;
+      const scale = Math.min(availW / img.width, availH / img.height);
+      const drawW = img.width * scale;
+      const drawH = img.height * scale;
+      const offsetX = (N - drawW) / 2;
+      const offsetY = (N - drawH) / 2;
+
+      ctx.clearRect(0, 0, N, N);
+      ctx.drawImage(img, offsetX, offsetY, drawW, drawH);
+
+      const imgData = ctx.getImageData(0, 0, N, N).data;
+
+      // Auto-detect uniform solid background from corners
+      const corners = [
+        [0, 0], [N - 1, 0], [0, N - 1], [N - 1, N - 1]
+      ];
+      const cornerSamples = [];
+      for (const [cx, cy] of corners) {
+        const idx = (cy * N + cx) * 4;
+        if (imgData[idx + 3] > 220) {
+          cornerSamples.push([imgData[idx], imgData[idx + 1], imgData[idx + 2]]);
+        }
+      }
+
+      let bgKeyColor = null;
+      if (cornerSamples.length >= 3) {
+        const [r0, g0, b0] = cornerSamples[0];
+        const allSimilar = cornerSamples.every(([r, g, b]) =>
+          Math.hypot(r - r0, g - g0, b - b0) < 28
+        );
+        if (allSimilar) bgKeyColor = [r0, g0, b0];
+      }
+
+      // Collect foreground pixels
+      const validPixels = [];
+      for (let y = 0; y < N; y++) {
+        for (let x = 0; x < N; x++) {
+          const idx = (y * N + x) * 4;
+          const r = imgData[idx];
+          const g = imgData[idx + 1];
+          const b = imgData[idx + 2];
+          const a = imgData[idx + 3];
+
+          if (a < 64) continue;
+          if (bgKeyColor) {
+            const distBg = Math.hypot(r - bgKeyColor[0], g - bgKeyColor[1], b - bgKeyColor[2]);
+            if (distBg < 32) continue;
+          }
+
+          validPixels.push({ x, y, r, g, b, a });
+        }
+      }
+
+      if (validPixels.length === 0) {
+        for (let y = 0; y < N; y++) {
+          for (let x = 0; x < N; x++) {
+            const idx = (y * N + x) * 4;
+            if (imgData[idx + 3] >= 35) {
+              validPixels.push({
+                x, y,
+                r: imgData[idx],
+                g: imgData[idx + 1],
+                b: imgData[idx + 2],
+                a: imgData[idx + 3]
+              });
+            }
+          }
+        }
+      }
+
+      // Segment into up to 6 distinct color clusters
+      const clusters = segmentLogoColors(validPixels, 6);
+
+      // Pre-compute smooth vector THREE.Shapes for each cluster using Sub-Pixel Marching Squares + SDF Blur
+      const worldSize = 7.2;
+      clusters.forEach(cluster => {
+        cluster.shapes = extractSmoothShapesFromCluster(cluster.pixels, N, worldSize, tierConfig, 0.45);
+        // For Layered SDF Relief mode, also extract an eroded inner relief contour for multi-tiered sculpting
+        cluster.innerReliefShapes = extractSmoothShapesFromCluster(cluster.pixels, N, worldSize, tierConfig, 0.72);
+      });
+
+      state.extractedClusters = clusters;
+      renderDetectedPaletteSwatches(clusters);
+      buildExtrudedLogoMeshes(clusters, tierConfig);
+    }
+
+    /**
+     * Quantizes foreground logo pixels into up to `maxClusters` dominant color clusters
+     * using greedy perceptual RGB distance merging and computes luminance & hex values.
+     */
+    function segmentLogoColors(pixels, maxClusters = 6) {
+      if (!pixels || pixels.length === 0) return [];
+
+      // 1. Bucket pixels into fine 16-level RGB bins to find initial color peaks
+      const binMap = new Map();
+      for (let i = 0; i < pixels.length; i++) {
+        const p = pixels[i];
+        const qr = p.r >> 4;
+        const qg = p.g >> 4;
+        const qb = p.b >> 4;
+        const key = (qr << 8) | (qg << 4) | qb;
+        let bin = binMap.get(key);
+        if (!bin) {
+          bin = { rSum: 0, gSum: 0, bSum: 0, count: 0 };
+          binMap.set(key, bin);
+        }
+        bin.rSum += p.r;
+        bin.gSum += p.g;
+        bin.bSum += p.b;
+        bin.count++;
+      }
+
+      // Sort bins by pixel frequency descending
+      const sortedBins = Array.from(binMap.values())
+        .map(b => ({
+          r: Math.round(b.rSum / b.count),
+          g: Math.round(b.gSum / b.count),
+          b: Math.round(b.bSum / b.count),
+          count: b.count
+        }))
+        .sort((a, b) => b.count - a.count);
+
+      // 2. Select distinct cluster centroids separated by minimum perceptual RGB distance
+      const centroids = [];
+      const minColorDist = 42;
+      for (const bin of sortedBins) {
+        if (centroids.length >= maxClusters) break;
+        const tooClose = centroids.some(c =>
+          Math.hypot(bin.r - c.r, bin.g - c.g, bin.b - c.b) < minColorDist
+        );
+        if (!tooClose) {
+          centroids.push({ r: bin.r, g: bin.g, b: bin.b, pixels: [], rSum: 0, gSum: 0, bSum: 0 });
+        }
+      }
+
+      if (centroids.length === 0 && sortedBins.length > 0) {
+        const first = sortedBins[0];
+        centroids.push({ r: first.r, g: first.g, b: first.b, pixels: [], rSum: 0, gSum: 0, bSum: 0 });
+      }
+
+      // 3. Assign every foreground pixel to its nearest cluster centroid
+      for (let i = 0; i < pixels.length; i++) {
+        const p = pixels[i];
+        let bestIdx = 0;
+        let bestDist = Infinity;
+        for (let c = 0; c < centroids.length; c++) {
+          const cent = centroids[c];
+          const dr = p.r - cent.r;
+          const dg = p.g - cent.g;
+          const db = p.b - cent.b;
+          const d = dr * dr + dg * dg + db * db;
+          if (d < bestDist) {
+            bestDist = d;
+            bestIdx = c;
+          }
+        }
+        const winner = centroids[bestIdx];
+        winner.pixels.push(p);
+        winner.rSum += p.r;
+        winner.gSum += p.g;
+        winner.bSum += p.b;
+      }
+
+      // 4. Filter out tiny noise clusters (< 0.4% of total foreground pixels) & finalize cluster metadata
+      const minCount = Math.max(4, Math.floor(pixels.length * 0.004));
+      let validClusters = centroids.filter(c => c.pixels.length >= minCount);
+      if (validClusters.length === 0 && centroids.length > 0) {
+        validClusters = [centroids[0]];
+      }
+
+      return validClusters.map(c => {
+        const len = c.pixels.length;
+        const r = Math.round(c.rSum / len);
+        const g = Math.round(c.gSum / len);
+        const b = Math.round(c.bSum / len);
+        const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        return {
+          r,
+          g,
+          b,
+          hex: rgbToHex(r, g, b),
+          luminance,
+          pixels: c.pixels
+        };
+      });
+    }
+
+    /**
+     * Converts a cluster's binary pixel mask into a smooth continuous float field via
+     * separable Gaussian SDF smoothing, extracts sub-pixel Marching Squares contours,
+     * applies Laplacian + Chaikin corner-cutting smoothing, and builds `THREE.Shape`s with holes.
+     */
+    function extractSmoothShapesFromCluster(pixels, N, worldSize, tierConfig, isoThreshold = 0.45) {
+      if (!pixels || pixels.length < 4) return [];
+
+      // 1. Populate initial binary occupancy grid (padded by 2 cells to guarantee closed contours)
+      const W = N + 4;
+      const H = N + 4;
+      let field = new Float32Array(W * H);
+      for (let i = 0; i < pixels.length; i++) {
+        const p = pixels[i];
+        field[(p.y + 2) * W + (p.x + 2)] = 1.0;
+      }
+
+      // 2. Apply separable 5-tap Gaussian blur passes to turn staircase edges into a smooth continuous SDF field
+      const kernel = [0.0625, 0.25, 0.375, 0.25, 0.0625];
+      const temp = new Float32Array(W * H);
+      const blurPasses = 2;
+
+      for (let pass = 0; pass < blurPasses; pass++) {
+        // Horizontal blur
+        for (let y = 2; y < H - 2; y++) {
+          const row = y * W;
+          for (let x = 2; x < W - 2; x++) {
+            temp[row + x] =
+              field[row + x - 2] * kernel[0] +
+              field[row + x - 1] * kernel[1] +
+              field[row + x]     * kernel[2] +
+              field[row + x + 1] * kernel[3] +
+              field[row + x + 2] * kernel[4];
+          }
+        }
+        // Vertical blur
+        for (let y = 2; y < H - 2; y++) {
+          for (let x = 2; x < W - 2; x++) {
+            field[y * W + x] =
+              temp[(y - 2) * W + x] * kernel[0] +
+              temp[(y - 1) * W + x] * kernel[1] +
+              temp[y * W + x]       * kernel[2] +
+              temp[(y + 1) * W + x] * kernel[3] +
+              temp[(y + 2) * W + x] * kernel[4];
+          }
+        }
+      }
+
+      // 3. Sub-Pixel Marching Squares Iso-Contour Extraction
+      const segments = [];
+      const interp = (v1, v2) => {
+        const dv = v2 - v1;
+        if (Math.abs(dv) < 1e-5) return 0.5;
+        return Math.max(0.0, Math.min(1.0, (isoThreshold - v1) / dv));
+      };
+
+      // Directed Marching Squares lookup table (keeps interior on the left -> CCW in world coords)
+      for (let y = 0; y < H - 1; y++) {
+        for (let x = 0; x < W - 1; x++) {
+          // Sample corners in world-aligned Y-up orientation
+          const vBL = field[(y + 1) * W + x];
+          const vBR = field[(y + 1) * W + (x + 1)];
+          const vTR = field[y * W + (x + 1)];
+          const vTL = field[y * W + x];
+
+          let mask = 0;
+          if (vBL >= isoThreshold) mask |= 1;
+          if (vBR >= isoThreshold) mask |= 2;
+          if (vTR >= isoThreshold) mask |= 4;
+          if (vTL >= isoThreshold) mask |= 8;
+
+          if (mask === 0 || mask === 15) continue;
+
+          // Sub-pixel edge points in grid space (x in [0, W], yDown in [0, H])
+          const ptBottom = () => ({ x: x + interp(vBL, vBR), y: y + 1 });
+          const ptRight  = () => ({ x: x + 1, y: y + 1 - interp(vBR, vTR) });
+          const ptTop    = () => ({ x: x + interp(vTL, vTR), y: y });
+          const ptLeft   = () => ({ x: x, y: y + 1 - interp(vBL, vTL) });
+
+          const addSeg = (pA, pB) => segments.push({ a: pA, b: pB });
+
+          switch (mask) {
+            case 1:  addSeg(ptLeft(), ptBottom()); break;
+            case 2:  addSeg(ptBottom(), ptRight()); break;
+            case 3:  addSeg(ptLeft(), ptRight()); break;
+            case 4:  addSeg(ptRight(), ptTop()); break;
+            case 5: {
+              const center = 0.25 * (vBL + vBR + vTR + vTL);
+              if (center >= isoThreshold) {
+                addSeg(ptLeft(), ptTop());
+                addSeg(ptRight(), ptBottom());
+              } else {
+                addSeg(ptLeft(), ptBottom());
+                addSeg(ptRight(), ptTop());
+              }
+              break;
+            }
+            case 6:  addSeg(ptBottom(), ptTop()); break;
+            case 7:  addSeg(ptLeft(), ptTop()); break;
+            case 8:  addSeg(ptTop(), ptLeft()); break;
+            case 9:  addSeg(ptTop(), ptBottom()); break;
+            case 10: {
+              const center = 0.25 * (vBL + vBR + vTR + vTL);
+              if (center >= isoThreshold) {
+                addSeg(ptBottom(), ptRight());
+                addSeg(ptTop(), ptLeft());
+              } else {
+                addSeg(ptBottom(), ptLeft());
+                addSeg(ptTop(), ptRight());
+              }
+              break;
+            }
+            case 11: addSeg(ptTop(), ptRight()); break;
+            case 12: addSeg(ptRight(), ptLeft()); break;
+            case 13: addSeg(ptRight(), ptBottom()); break;
+            case 14: addSeg(ptBottom(), ptLeft()); break;
+          }
+        }
+      }
+
+      if (segments.length === 0) return [];
+
+      // 4. Stitch directed segments into closed polygon loops using spatial endpoint hashing
+      const keyOf = pt => `${Math.round(pt.x * 1000)},${Math.round(pt.y * 1000)}`;
+      const startMap = new Map();
+      segments.forEach((seg, idx) => {
+        const k = keyOf(seg.a);
+        if (!startMap.has(k)) startMap.set(k, []);
+        startMap.get(k).push(idx);
+      });
+
+      const used = new Uint8Array(segments.length);
+      const rawLoops = [];
+
+      for (let i = 0; i < segments.length; i++) {
+        if (used[i]) continue;
+        used[i] = 1;
+        const loop = [segments[i].a];
+        let currEnd = segments[i].b;
+
+        let safety = 0;
+        while (safety++ < segments.length + 10) {
+          loop.push(currEnd);
+          const nextKey = keyOf(currEnd);
+          const candidates = startMap.get(nextKey);
+          if (!candidates) break;
+          let nextIdx = -1;
+          for (const cIdx of candidates) {
+            if (!used[cIdx]) {
+              nextIdx = cIdx;
+              break;
+            }
+          }
+          if (nextIdx === -1) break;
+          used[nextIdx] = 1;
+          currEnd = segments[nextIdx].b;
+        }
+
+        if (loop.length >= 6) {
+          // Remove duplicate closing point if identical to start
+          const first = loop[0];
+          const last = loop[loop.length - 1];
+          if (Math.hypot(first.x - last.x, first.y - last.y) < 0.05) {
+            loop.pop();
+          }
+          rawLoops.push(loop);
+        }
+      }
+
+      // 5. Transform loops to centered 3D World Coordinates & apply Laplacian + Chaikin Corner Smoothing
+      const cellSize = worldSize / N;
+      const smoothedLoops = [];
+
+      for (const rawLoop of rawLoops) {
+        let pts = rawLoop.map(p => ({
+          x: ((p.x - 2) - N / 2) * cellSize,
+          y: (N / 2 - (p.y - 2)) * cellSize
+        }));
+
+        // Taubin / Laplacian zero-shrinkage smoothing passes
+        const smoothPasses = tierConfig.smoothPasses || 5;
+        for (let s = 0; s < smoothPasses; s++) {
+          pts = laplacianSmoothLoop(pts, 0.48);
+          pts = laplacianSmoothLoop(pts, -0.46); // Anti-shrinkage inflation pass
+        }
+
+        // Chaikin corner-cutting subdivision for silky curves
+        const chaikinPasses = tierConfig.chaikinPasses || 1;
+        for (let c = 0; c < chaikinPasses; c++) {
+          if (pts.length < 400) {
+            pts = chaikinSubdivideLoop(pts);
+          }
+        }
+
+        const area = computeSignedPolygonArea(pts);
+        if (Math.abs(area) < (cellSize * cellSize * 1.5)) continue; // Ignore tiny 1-pixel specks
+
+        smoothedLoops.push({
+          pts,
+          area,
+          absArea: Math.abs(area)
+        });
+      }
+
+      if (smoothedLoops.length === 0) return [];
+
+      // 6. Classify outer contours (CCW, area > 0) vs inner holes (CW, area < 0) and build THREE.Shape hierarchy
+      const outers = smoothedLoops.filter(l => l.area > 0).sort((a, b) => b.absArea - a.absArea);
+      const holes = smoothedLoops.filter(l => l.area < 0);
+
+      // Fallback if winding was inverted
+      if (outers.length === 0 && holes.length > 0) {
+        holes.forEach(h => {
+          h.pts.reverse();
+          h.area = -h.area;
+          outers.push(h);
+        });
+        holes.length = 0;
+      }
+
+      const outerShapes = outers.map(o => {
+        const shape = new THREE.Shape();
+        shape.moveTo(o.pts[0].x, o.pts[0].y);
+        for (let i = 1; i < o.pts.length; i++) {
+          shape.lineTo(o.pts[i].x, o.pts[i].y);
+        }
+        shape.closePath();
+        return { shape, poly: o.pts, absArea: o.absArea };
+      });
+
+      // Assign each hole to the smallest outer polygon that contains its first vertex
+      for (const h of holes) {
+        const testPt = h.pts[0];
+        let bestOwner = null;
+        for (let i = outerShapes.length - 1; i >= 0; i--) {
+          if (pointInPolygon(testPt, outerShapes[i].poly)) {
+            bestOwner = outerShapes[i];
+            break;
+          }
+        }
+        if (bestOwner) {
+          const holePath = new THREE.Path();
+          holePath.moveTo(h.pts[0].x, h.pts[0].y);
+          for (let i = 1; i < h.pts.length; i++) {
+            holePath.lineTo(h.pts[i].x, h.pts[i].y);
+          }
+          holePath.closePath();
+          bestOwner.shape.holes.push(holePath);
+        }
+      }
+
+      return outerShapes.map(o => o.shape);
+    }
+
+    function laplacianSmoothLoop(pts, weight = 0.45) {
+      const len = pts.length;
+      const out = new Array(len);
+      for (let i = 0; i < len; i++) {
+        const prev = pts[(i - 1 + len) % len];
+        const curr = pts[i];
+        const next = pts[(i + 1) % len];
+        const avgX = 0.5 * (prev.x + next.x);
+        const avgY = 0.5 * (prev.y + next.y);
+        out[i] = {
+          x: curr.x + weight * (avgX - curr.x),
+          y: curr.y + weight * (avgY - curr.y)
+        };
+      }
+      return out;
+    }
+
+    function chaikinSubdivideLoop(pts) {
+      const len = pts.length;
+      const out = [];
+      for (let i = 0; i < len; i++) {
+        const p0 = pts[i];
+        const p1 = pts[(i + 1) % len];
+        out.push({
+          x: 0.75 * p0.x + 0.25 * p1.x,
+          y: 0.75 * p0.y + 0.25 * p1.y
+        });
+        out.push({
+          x: 0.25 * p0.x + 0.75 * p1.x,
+          y: 0.25 * p0.y + 0.75 * p1.y
+        });
+      }
+      return out;
+    }
+
+    function computeSignedPolygonArea(pts) {
+      let area = 0;
+      const len = pts.length;
+      for (let i = 0; i < len; i++) {
+        const p1 = pts[i];
+        const p2 = pts[(i + 1) % len];
+        area += (p1.x * p2.y - p2.x * p1.y);
+      }
+      return 0.5 * area;
+    }
+
+    function pointInPolygon(pt, poly) {
+      let inside = false;
+      for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const xi = poly[i].x, yi = poly[i].y;
+        const xj = poly[j].x, yj = poly[j].y;
+        const intersect = ((yi > pt.y) !== (yj > pt.y)) &&
+          (pt.x < (xj - xi) * (pt.y - yi) / ((yj - yi) || 1e-7) + xi);
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    }
+
+    /**
+     * Normalizes UV coordinates on an extruded geometry using tri-planar projection
+     * so 1024x1024 procedural weaves (Denim, Linen, Leather) map evenly with zero stretching.
+     */
+    function applyUniformTriplanarUVs(geometry) {
+      geometry.computeVertexNormals();
+      const posAttr = geometry.attributes.position;
+      const normAttr = geometry.attributes.normal;
+      const uvAttr = geometry.attributes.uv;
+      if (!posAttr || !uvAttr) return;
+
+      const uvScale = 0.22; // Uniform world-to-UV scale
+      for (let i = 0; i < posAttr.count; i++) {
+        const vx = posAttr.getX(i);
+        const vy = posAttr.getY(i);
+        const vz = posAttr.getZ(i);
+
+        const nx = Math.abs(normAttr.getX(i));
+        const ny = Math.abs(normAttr.getY(i));
+        const nz = Math.abs(normAttr.getZ(i));
+
+        if (nz >= nx && nz >= ny) {
+          uvAttr.setXY(i, (vx + 3.6) * uvScale, (vy + 3.6) * uvScale);
+        } else if (nx >= ny) {
+          uvAttr.setXY(i, (vz + 1.0) * uvScale, (vy + 3.6) * uvScale);
+        } else {
+          uvAttr.setXY(i, (vx + 3.6) * uvScale, (vz + 1.0) * uvScale);
+        }
+      }
+      uvAttr.needsUpdate = true;
+    }
+
+    /**
+     * Builds razor-sharp, smooth 3D extruded vector meshes (`THREE.ExtrudeGeometry`)
+     * from the smoothed sub-pixel contours for each color cluster.
+     */
+    function buildExtrudedLogoMeshes(clusters, tierConfigOverride) {
+      // Dispose previous geometries & materials cleanly
+      while (logoGroup.children.length > 0) {
+        const child = logoGroup.children.pop();
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+          else child.material.dispose();
+        }
+      }
+
+      if (!clusters || clusters.length === 0) return;
+
+      const tierConfig = tierConfigOverride || {
+        standard: { curveSegments: 12, bevelSegments: 4 },
+        high:     { curveSegments: 18, bevelSegments: 6 },
+        ultra:    { curveSegments: 24, bevelSegments: 8 }
+      }[state.meshQuality || 'ultra'];
+
+      const bevelFactor = state.bevelSoftness / 100; // 0 to 1
+      const baseDepth = 0.65 * state.extrusionDepth;
+
+      clusters.forEach((cluster, cIdx) => {
+        if (!cluster.shapes || cluster.shapes.length === 0) return;
+
+        const material = createAdaptiveMaterialForColor(cluster);
+        const layerStep = 1 + ((clusters.length - 1 - cIdx) * 0.14) + (cluster.luminance * 0.22);
+        const layerDepth = baseDepth * layerStep;
+
+        const bevelSize = 0.015 + bevelFactor * 0.085;
+        const bevelThickness = 0.015 + bevelFactor * 0.095 * Math.min(1.4, state.extrusionDepth);
+
+        const extrudeSettings = {
+          depth: layerDepth,
+          bevelEnabled: bevelFactor > 0.02,
+          bevelSegments: Math.max(2, tierConfig.bevelSegments),
+          steps: 1,
+          bevelSize: bevelSize,
+          bevelThickness: bevelThickness,
+          curveSegments: tierConfig.curveSegments
+        };
+
+        const geometry = new THREE.ExtrudeGeometry(cluster.shapes, extrudeSettings);
+        // Center geometry along Z axis so front and back faces are symmetric
+        geometry.translate(0, 0, -layerDepth / 2);
+        applyUniformTriplanarUVs(geometry);
+
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.userData = { cluster };
+        logoGroup.add(mesh);
+
+        // In "Layered SDF Relief" mode, add a sculpted inner crest tier on top of each color region
+        if (state.geometryMode === 'relief' && cluster.innerReliefShapes && cluster.innerReliefShapes.length > 0) {
+          const crestDepth = layerDepth * (1.28 + cluster.luminance * 0.25);
+          const crestSettings = {
+            depth: crestDepth,
+            bevelEnabled: true,
+            bevelSegments: Math.max(3, tierConfig.bevelSegments),
+            steps: 1,
+            bevelSize: bevelSize * 1.15,
+            bevelThickness: bevelThickness * 1.25,
+            curveSegments: tierConfig.curveSegments
+          };
+          const crestGeo = new THREE.ExtrudeGeometry(cluster.innerReliefShapes, crestSettings);
+          crestGeo.translate(0, 0, -crestDepth / 2);
+          applyUniformTriplanarUVs(crestGeo);
+
+          const crestMesh = new THREE.Mesh(crestGeo, material);
+          crestMesh.castShadow = true;
+          crestMesh.receiveShadow = true;
+          crestMesh.userData = { cluster };
+          logoGroup.add(crestMesh);
+        }
+      });
+    }
+
+    /********************************************************************
+     * 6. COLOR-ADAPTIVE PBR MATERIAL ENGINE
+     ********************************************************************/
+    /**
+     * Dynamically adapts the logo's original RGB color into the chosen
+     * 3D physical material preset, controlled by the "Logo Color Adaptation" slider.
+     * Uses 1024x1024 Tangent-Space Normal Maps (`normalMap`) for crisp, zero-pixelation relief.
+     */
+    function createAdaptiveMaterialForColor(cluster) {
+      const logoColor = new THREE.Color(cluster.r / 255, cluster.g / 255, cluster.b / 255);
+      const hsl = {};
+      logoColor.getHSL(hsl);
+
+      const blend = state.colorBlend; // 0 = neutral material, 1 = full logo color adaptation
+      const bumpMul = state.bumpIntensity; // 0.0 to 2.0
+      const preset = state.materialId;
+
+      // 1. WOVEN DENIM (Matte diagonal twill fabric with indigo base & dyed logo colors)
+      if (preset === 'denim') {
+        const classicIndigo = new THREE.Color(0x28436e);
+        const dyedDenim = new THREE.Color().setHSL(
+          hsl.h,
+          Math.min(0.82, Math.max(0.22, hsl.s * 0.88)),
+          Math.max(0.22, Math.min(0.66, hsl.l * 0.94))
+        );
+        const finalColor = classicIndigo.clone().lerp(dyedDenim, blend);
+        const tex = proceduralTextures.denim;
+        const nScale = 0.85 * bumpMul;
+
+        return new THREE.MeshPhysicalMaterial({
+          color: finalColor,
+          map: tex ? tex.map : null,
+          normalMap: tex ? tex.normalMap : null,
+          normalScale: new THREE.Vector2(nScale, nScale),
+          metalness: 0.0,
+          roughness: 0.89,
+          clearcoat: 0.04,
+          clearcoatRoughness: 0.85,
+          reflectivity: 0.15,
+          envMapIntensity: 0.38
+        });
+      }
+
+      // 2. LINEN / CANVAS CLOTH (Crisp cross-hatch woven textile)
+      if (preset === 'linen') {
+        const rawLinen = new THREE.Color(0xd6cfc2);
+        const dyedCloth = new THREE.Color().setHSL(
+          hsl.h,
+          Math.min(0.76, hsl.s * 0.82),
+          Math.max(0.32, Math.min(0.80, hsl.l * 1.05))
+        );
+        const finalColor = rawLinen.clone().lerp(dyedCloth, blend);
+        const tex = proceduralTextures.linen;
+        const nScale = 0.78 * bumpMul;
+
+        return new THREE.MeshPhysicalMaterial({
+          color: finalColor,
+          map: tex ? tex.map : null,
+          normalMap: tex ? tex.normalMap : null,
+          normalScale: new THREE.Vector2(nScale, nScale),
+          metalness: 0.0,
+          roughness: 0.93,
+          clearcoat: 0.0,
+          reflectivity: 0.10,
+          envMapIntensity: 0.30
+        });
+      }
+
+      // 3. PEBBLED MATTE LEATHER (Organic cellular grain with supple satin-matte sheen)
+      if (preset === 'leather') {
+        const saddleLeather = new THREE.Color(0x6e4228);
+        const dyedLeather = new THREE.Color().setHSL(
+          hsl.h,
+          Math.min(0.88, hsl.s * 0.95),
+          Math.max(0.18, Math.min(0.62, hsl.l * 0.88))
+        );
+        const finalColor = saddleLeather.clone().lerp(dyedLeather, blend);
+        const tex = proceduralTextures.leather;
+        const nScale = 0.95 * bumpMul;
+
+        return new THREE.MeshPhysicalMaterial({
+          color: finalColor,
+          map: tex ? tex.map : null,
+          normalMap: tex ? tex.normalMap : null,
+          normalScale: new THREE.Vector2(nScale, nScale),
+          metalness: 0.02,
+          roughness: 0.72,
+          clearcoat: 0.16,
+          clearcoatRoughness: 0.52,
+          reflectivity: 0.38,
+          envMapIntensity: 0.65
+        });
+      }
+
+      // 4. BRUSHED SUEDE / FELT (Ultra-matte velvety fibrous nap)
+      if (preset === 'suede') {
+        const neutralSuede = new THREE.Color(0x71717a);
+        const dyedSuede = new THREE.Color().setHSL(
+          hsl.h,
+          Math.min(0.75, hsl.s * 0.82),
+          Math.max(0.26, Math.min(0.72, hsl.l * 0.96))
+        );
+        const finalColor = neutralSuede.clone().lerp(dyedSuede, blend);
+        const tex = proceduralTextures.suede;
+        const nScale = 0.65 * bumpMul;
+
+        return new THREE.MeshPhysicalMaterial({
+          color: finalColor,
+          map: tex ? tex.map : null,
+          normalMap: tex ? tex.normalMap : null,
+          normalScale: new THREE.Vector2(nScale, nScale),
+          metalness: 0.0,
+          roughness: 0.96,
+          clearcoat: 0.03,
+          clearcoatRoughness: 0.9,
+          reflectivity: 0.08,
+          envMapIntensity: 0.25
+        });
+      }
+
+      // 5. MATTE CONCRETE / STONE (Speckled porous mineral grit)
+      if (preset === 'concrete') {
+        const architecturalStone = new THREE.Color(0x9ca3af);
+        const pigmentedStone = new THREE.Color().setHSL(
+          hsl.h,
+          hsl.s * 0.58,
+          Math.max(0.32, Math.min(0.76, hsl.l * 1.02))
+        );
+        const finalColor = architecturalStone.clone().lerp(pigmentedStone, blend);
+        const tex = proceduralTextures.concrete;
+        const nScale = 0.85 * bumpMul;
+
+        return new THREE.MeshPhysicalMaterial({
+          color: finalColor,
+          map: tex ? tex.map : null,
+          normalMap: tex ? tex.normalMap : null,
+          normalScale: new THREE.Vector2(nScale, nScale),
+          metalness: 0.0,
+          roughness: 0.91,
+          clearcoat: 0.0,
+          reflectivity: 0.14,
+          envMapIntensity: 0.35
+        });
+      }
+
+      if (preset === 'anodized') {
+        // Anodized Brushed Metal: Logo color tints metallic albedo & specular sheen
+        const neutralMetal = new THREE.Color(0xd4d4d8);
+        const boostedLogo = new THREE.Color().setHSL(
+          hsl.h,
+          Math.min(1, hsl.s * 1.15),
+          Math.max(0.32, Math.min(0.75, hsl.l * 1.1))
+        );
+        const finalColor = neutralMetal.clone().lerp(boostedLogo, blend);
+
+        return new THREE.MeshPhysicalMaterial({
+          color: finalColor,
+          metalness: 0.88,
+          roughness: 0.22,
+          clearcoat: 0.35,
+          clearcoatRoughness: 0.2,
+          reflectivity: 1.0,
+          envMapIntensity: 1.6
+        });
+      }
+
+      if (preset === 'acrylic') {
+        // Frosted Acrylic / Glass: Translucent glass with colored transmission & specular tint
+        const neutralGlass = new THREE.Color(0xe0f2fe);
+        const glassTint = new THREE.Color().setHSL(
+          hsl.h,
+          Math.min(1, hsl.s * 1.2),
+          Math.max(0.48, hsl.l)
+        );
+        const finalColor = neutralGlass.clone().lerp(glassTint, blend);
+
+        return new THREE.MeshPhysicalMaterial({
+          color: finalColor,
+          metalness: 0.05,
+          roughness: 0.14,
+          transmission: 0.72,
+          transparent: true,
+          opacity: 0.88,
+          ior: 1.52,
+          reflectivity: 0.95,
+          clearcoat: 1.0,
+          clearcoatRoughness: 0.06,
+          envMapIntensity: 1.8
+        });
+      }
+
+      if (preset === 'enamel') {
+        // Glossy Enamel / Ceramic: Rich saturated porcelain with high-gloss glaze
+        const neutralCeramic = new THREE.Color(0xf8fafc);
+        const saturatedColor = new THREE.Color().setHSL(
+          hsl.h,
+          Math.min(1.0, hsl.s * 1.25),
+          Math.max(0.25, Math.min(0.68, hsl.l))
+        );
+        const finalColor = neutralCeramic.clone().lerp(saturatedColor, blend);
+
+        return new THREE.MeshPhysicalMaterial({
+          color: finalColor,
+          metalness: 0.08,
+          roughness: 0.08,
+          clearcoat: 1.0,
+          clearcoatRoughness: 0.04,
+          reflectivity: 1.0,
+          envMapIntensity: 1.4
+        });
+      }
+
+      if (preset === 'clay') {
+        // Matte Soft-Touch Clay: Desaturated, warm velvety pastel shift
+        const neutralClay = new THREE.Color(0xa1a1aa);
+        const clayColor = new THREE.Color().setHSL(
+          hsl.h,
+          hsl.s * 0.68,
+          Math.max(0.38, Math.min(0.78, hsl.l * 1.08))
+        );
+        const finalColor = neutralClay.clone().lerp(clayColor, blend);
+
+        return new THREE.MeshPhysicalMaterial({
+          color: finalColor,
+          metalness: 0.02,
+          roughness: 0.86,
+          clearcoat: 0.05,
+          reflectivity: 0.25,
+          envMapIntensity: 0.65
+        });
+      }
+
+      if (preset === 'neon') {
+        // Cyber Neon Emissive: Dark metallic body with vibrant logo-driven emissive glow
+        const baseNeon = new THREE.Color(0x38bdf8);
+        const vividNeon = new THREE.Color().setHSL(
+          hsl.h,
+          Math.max(0.85, hsl.s),
+          Math.max(0.52, hsl.l)
+        );
+        const activeNeon = baseNeon.clone().lerp(vividNeon, blend);
+
+        return new THREE.MeshPhysicalMaterial({
+          color: activeNeon.clone().multiplyScalar(0.45),
+          emissive: activeNeon,
+          emissiveIntensity: 0.78,
+          metalness: 0.4,
+          roughness: 0.18,
+          clearcoat: 0.9,
+          envMapIntensity: 1.3
+        });
+      }
+
+      if (preset === 'goldfoil') {
+        // Luxe Gold, Rose Gold & Chrome Foil: Maps logo luminance & hue into precious metals
+        let baseFoil;
+        if (cluster.luminance > 0.62) {
+          baseFoil = new THREE.Color(0xfde047); // Warm 24k Gold
+        } else if (hsl.h < 0.12 || hsl.h > 0.85) {
+          baseFoil = new THREE.Color(0xfda4af); // Rose Gold
+        } else {
+          baseFoil = new THREE.Color(0xe2e8f0); // Polished Platinum/Chrome
+        }
+
+        const tintedFoil = baseFoil.clone().lerp(logoColor, blend * 0.55);
+
+        return new THREE.MeshPhysicalMaterial({
+          color: tintedFoil,
+          metalness: 0.96,
+          roughness: 0.14,
+          clearcoat: 0.6,
+          clearcoatRoughness: 0.1,
+          envMapIntensity: 1.9
+        });
+      }
+
+      return new THREE.MeshStandardMaterial({ color: logoColor });
+    }
+
+    /**
+     * Fast material-only update when switching Material Presets or moving the Color Adaptation slider
+     * (no need to re-segment the image!).
+     */
+    function refreshAllMeshMaterials() {
+      logoGroup.children.forEach(mesh => {
+        if (mesh.userData && mesh.userData.cluster) {
+          const newMat = createAdaptiveMaterialForColor(mesh.userData.cluster);
+          if (mesh.material) mesh.material.dispose();
+          mesh.material = newMat;
+        }
+      });
+    }
+
+    /********************************************************************
+     * 7. UI CONTROLS & INTERACTION HANDLERS
+     ********************************************************************/
+    function renderSampleLogosGrid() {
+      const grid = document.getElementById('sample-logos-grid');
+      grid.innerHTML = SAMPLE_LOGOS.map(s => {
+        const encoded = 'data:image/svg+xml;utf8,' + encodeURIComponent(s.svg);
+        return `
+          <button
+            onclick="loadSampleLogo('${s.id}')"
+            id="sample-btn-${s.id}"
+            class="sample-logo-btn group flex flex-col items-center p-2 rounded-xl border border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800/80 transition"
+            title="${s.name}"
+          >
+            <img src="${encoded}" alt="${s.name}" class="w-9 h-9 object-contain group-hover:scale-110 transition-transform" />
+            <span class="text-[10px] text-zinc-400 group-hover:text-zinc-200 mt-1 truncate w-full text-center">${s.name}</span>
+          </button>
+        `;
+      }).join('');
+      highlightActiveSampleButton();
+    }
+
+    function highlightActiveSampleButton() {
+      document.querySelectorAll('.sample-logo-btn').forEach(btn => {
+        btn.classList.remove('border-indigo-500', 'bg-indigo-950/30');
+        btn.classList.add('border-zinc-800');
+      });
+      if (state.activeSampleId) {
+        const activeBtn = document.getElementById(`sample-btn-${state.activeSampleId}`);
+        if (activeBtn) {
+          activeBtn.classList.remove('border-zinc-800');
+          activeBtn.classList.add('border-indigo-500', 'bg-indigo-950/30');
+        }
+      }
+    }
+
+    function setMaterialCategory(cat) {
+      state.materialCategory = cat;
+      ['all', 'matte', 'studio'].forEach(c => {
+        const btn = document.getElementById(`cat-${c}-btn`);
+        if (!btn) return;
+        if (c === cat) {
+          btn.className = 'py-1 px-2 rounded-lg text-[11px] font-medium bg-indigo-600 text-white transition';
+        } else {
+          btn.className = 'py-1 px-2 rounded-lg text-[11px] font-medium text-zinc-400 hover:text-white transition';
+        }
+      });
+      renderMaterialPresetsGrid();
+    }
+
+    function renderMaterialPresetsGrid() {
+      const grid = document.getElementById('material-presets-grid');
+      const filtered = MATERIAL_PRESETS.filter(m =>
+        state.materialCategory === 'all' ? true : m.category === state.materialCategory
+      );
+
+      grid.innerHTML = filtered.map(m => {
+        const isActive = m.id === state.materialId;
+        return `
+          <button
+            onclick="selectMaterialPreset('${m.id}')"
+            class="flex items-start gap-2.5 p-2.5 rounded-xl border text-left transition ${
+              isActive
+                ? 'border-indigo-500 bg-indigo-950/35 shadow-md shadow-indigo-950/50'
+                : 'border-zinc-800/90 bg-zinc-900/50 hover:bg-zinc-900 hover:border-zinc-700'
+            }"
+          >
+            <div class="w-6 h-6 rounded-lg bg-gradient-to-br ${m.iconColor} shrink-0 mt-0.5 shadow-inner border border-white/20"></div>
+            <div class="min-w-0">
+              <div class="text-xs font-semibold text-zinc-100 truncate">${m.name}</div>
+              <div class="text-[10px] text-zinc-400 leading-tight line-clamp-2 mt-0.5">${m.desc}</div>
+            </div>
+          </button>
+        `;
+      }).join('');
+
+      const activeObj = MATERIAL_PRESETS.find(m => m.id === state.materialId);
+      if (activeObj) {
+        document.getElementById('active-material-badge').textContent = activeObj.name;
+        const tactileGroup = document.getElementById('tactile-controls-group');
+        if (tactileGroup) {
+          tactileGroup.style.opacity = activeObj.hasMicroTexture ? '1' : '0.45';
+        }
+      }
+    }
+
+    function selectMaterialPreset(matId) {
+      state.materialId = matId;
+      renderMaterialPresetsGrid();
+      refreshAllMeshMaterials();
+    }
+
+    function renderLightingPresetsGrid() {
+      const grid = document.getElementById('lighting-presets-grid');
+      grid.innerHTML = LIGHTING_PRESETS.map(l => {
+        const isActive = l.id === state.lightingId;
+        return `
+          <button
+            onclick="selectLightingPreset('${l.id}')"
+            class="px-3 py-2 rounded-xl border text-xs font-medium text-left flex items-center justify-between transition ${
+              isActive
+                ? 'border-indigo-500 bg-indigo-950/35 text-white'
+                : 'border-zinc-800/90 bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+            }"
+          >
+            <span class="truncate">${l.name}</span>
+            <span class="w-2 h-2 rounded-full ${isActive ? 'bg-indigo-400' : 'bg-zinc-700'}"></span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function selectLightingPreset(lightId) {
+      state.lightingId = lightId;
+      renderLightingPresetsGrid();
+      const rig = LIGHTING_PRESETS.find(l => l.id === lightId);
+      if (!rig) return;
+
+      keyLight.color.setHex(rig.keyColor);
+      keyLight.intensity = rig.keyIntensity;
+
+      fillLight.color.setHex(rig.fillColor);
+      fillLight.intensity = rig.fillIntensity;
+
+      rimLight.color.setHex(rig.rimColor);
+      rimLight.intensity = rig.rimIntensity;
+
+      ambientLight.color.setHex(rig.ambientColor);
+      ambientLight.intensity = rig.ambientIntensity;
+    }
+
+    function renderDetectedPaletteSwatches(clusters) {
+      const container = document.getElementById('palette-swatches');
+      container.innerHTML = clusters.map(c => `
+        <div
+          class="w-4 h-4 rounded-full border border-white/25 shadow-sm transition-transform hover:scale-125"
+          style="background-color: ${c.hex};"
+          title="Detected Logo Color: ${c.hex}"
+        ></div>
+      `).join('');
+    }
+
+    function setGeometryMode(mode) {
+      state.geometryMode = mode;
+      const segBtn = document.getElementById('mode-segmented-btn');
+      const relBtn = document.getElementById('mode-relief-btn');
+
+      if (mode === 'segmented') {
+        segBtn.className = 'py-1.5 px-2 rounded-lg text-xs font-medium bg-indigo-600 text-white transition';
+        relBtn.className = 'py-1.5 px-2 rounded-lg text-xs font-medium text-zinc-400 hover:text-white transition';
+      } else {
+        relBtn.className = 'py-1.5 px-2 rounded-lg text-xs font-medium bg-indigo-600 text-white transition';
+        segBtn.className = 'py-1.5 px-2 rounded-lg text-xs font-medium text-zinc-400 hover:text-white transition';
+      }
+
+      buildExtrudedLogoMeshes(state.extractedClusters);
+    }
+
+    function setMeshQualityTier(tier) {
+      state.meshQuality = tier;
+      const labels = { standard: 'Standard', high: 'High Precision', ultra: 'Ultra Smooth' };
+      const resLabel = document.getElementById('res-val');
+      if (resLabel) resLabel.textContent = labels[tier] || 'Ultra Smooth';
+
+      const btnMap = { standard: 'quality-std-btn', high: 'quality-high-btn', ultra: 'quality-ultra-btn' };
+      Object.entries(btnMap).forEach(([k, id]) => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        if (k === tier) {
+          btn.className = 'py-1 px-2 rounded-lg text-[11px] font-medium bg-indigo-600 text-white transition';
+        } else {
+          btn.className = 'py-1 px-2 rounded-lg text-[11px] font-medium text-zinc-400 hover:text-white transition';
+        }
+      });
+
+      if (state.currentImage) {
+        processLogoTo3D(state.currentImage);
+      }
+    }
+
+    function setBackgroundMode(mode) {
+      state.backgroundMode = mode;
+      const vp = document.getElementById('viewport-container');
+      vp.classList.remove('bg-studio-dark', 'bg-studio-light', 'bg-checkerboard');
+
+      ['dark', 'light', 'trans'].forEach(k => {
+        const btn = document.getElementById(`bg-${k}-btn`);
+        btn.className = 'px-2.5 py-1.5 rounded-lg text-xs font-medium text-zinc-400 hover:text-white transition';
+      });
+
+      if (mode === 'dark') {
+        vp.classList.add('bg-studio-dark');
+        document.getElementById('bg-dark-btn').className = 'px-2.5 py-1.5 rounded-lg text-xs font-medium bg-indigo-600 text-white transition';
+      } else if (mode === 'light') {
+        vp.classList.add('bg-studio-light');
+        document.getElementById('bg-light-btn').className = 'px-2.5 py-1.5 rounded-lg text-xs font-medium bg-indigo-600 text-white transition';
+      } else {
+        vp.classList.add('bg-checkerboard');
+        document.getElementById('bg-trans-btn').className = 'px-2.5 py-1.5 rounded-lg text-xs font-medium bg-indigo-600 text-white transition';
+      }
+    }
+
+    function toggleAutoRotate() {
+      state.autoRotate = !state.autoRotate;
+      const btn = document.getElementById('autorotate-btn');
+      if (state.autoRotate) {
+        btn.className = 'flex items-center gap-2 bg-zinc-900/85 backdrop-blur-md border border-zinc-800/80 px-3.5 py-2 rounded-xl text-xs font-medium text-indigo-300 hover:bg-zinc-800/90 transition shadow-xl';
+        btn.querySelector('span').textContent = 'Turntable: ON';
+      } else {
+        btn.className = 'flex items-center gap-2 bg-zinc-900/85 backdrop-blur-md border border-zinc-800/80 px-3.5 py-2 rounded-xl text-xs font-medium text-zinc-400 hover:bg-zinc-800/90 transition shadow-xl';
+        btn.querySelector('span').textContent = 'Turntable: OFF';
+      }
+    }
+
+    function resetCameraView() {
+      camera.position.set(0, 0, 13.5);
+      controls.target.set(0, 0, 0);
+      controls.update();
+      if (logoGroup) {
+        logoGroup.rotation.set(0, 0, 0);
+      }
+    }
+
+    /**
+     * Exports a crisp PNG snapshot of the current 3D view.
+     * Respects Dark Studio, Light Studio, or True Transparent Alpha background.
+     */
+    function exportPNGSnapshot() {
+      const prevBg = scene.background;
+      if (state.backgroundMode === 'dark') {
+        scene.background = new THREE.Color(0x0d1017);
+      } else if (state.backgroundMode === 'light') {
+        scene.background = new THREE.Color(0xe2e8f0);
+      } else {
+        scene.background = null; // Pure alpha transparency
+      }
+
+      renderer.render(scene, camera);
+      const dataURL = renderer.domElement.toDataURL('image/png');
+
+      // Restore transparent scene background so CSS gradient shines through
+      scene.background = prevBg;
+      renderer.render(scene, camera);
+
+      const link = document.createElement('a');
+      link.download = `3d-logo-${state.materialId}-${Date.now()}.png`;
+      link.href = dataURL;
+      link.click();
+
+      showToast('High-res 3D PNG Snapshot downloaded!');
+    }
+
+    /********************************************************************
+     * 8. EVENT LISTENERS & HELPERS
+     ********************************************************************/
+    function bindUIEvents() {
+      // File input upload
+      const fileInput = document.getElementById('logo-upload-input');
+      fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) handleUploadedFile(file);
+      });
+
+      // Drag and drop on drop-zone or viewport
+      const dropZone = document.getElementById('drop-zone');
+      const viewport = document.getElementById('viewport-container');
+
+      [dropZone, viewport].forEach(el => {
+        el.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          dropZone.classList.add('border-indigo-500', 'bg-indigo-950/30');
+        });
+        el.addEventListener('dragleave', () => {
+          dropZone.classList.remove('border-indigo-500', 'bg-indigo-950/30');
+        });
+        el.addEventListener('drop', (e) => {
+          e.preventDefault();
+          dropZone.classList.remove('border-indigo-500', 'bg-indigo-950/30');
+          if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+            handleUploadedFile(e.dataTransfer.files[0]);
+          }
+        });
+      });
+
+      // Color Adaptation Blend Slider
+      const blendSlider = document.getElementById('color-blend-slider');
+      blendSlider.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        state.colorBlend = val / 100;
+        document.getElementById('color-blend-val').textContent = `${val}%`;
+        refreshAllMeshMaterials();
+      });
+
+      // Texture Grain / Weave Scale Slider
+      const texScaleSlider = document.getElementById('tex-scale-slider');
+      if (texScaleSlider) {
+        texScaleSlider.addEventListener('input', (e) => {
+          const val = parseFloat(e.target.value);
+          state.textureScale = val;
+          document.getElementById('tex-scale-val').textContent = `${val.toFixed(1)}x`;
+          updateProceduralTextureRepeats();
+          refreshAllMeshMaterials();
+        });
+      }
+
+      // Tactile Bump Intensity Slider
+      const bumpIntSlider = document.getElementById('bump-int-slider');
+      if (bumpIntSlider) {
+        bumpIntSlider.addEventListener('input', (e) => {
+          const val = parseInt(e.target.value, 10);
+          state.bumpIntensity = val / 100;
+          document.getElementById('bump-int-val').textContent = `${val}%`;
+          refreshAllMeshMaterials();
+        });
+      }
+
+      // Extrusion Depth Slider
+      const depthSlider = document.getElementById('depth-slider');
+      depthSlider.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        state.extrusionDepth = val;
+        document.getElementById('depth-val').textContent = `${val.toFixed(2)}x`;
+        buildExtrudedLogoMeshes(state.extractedClusters);
+      });
+
+      // Bevel Softness Slider
+      const bevelSlider = document.getElementById('bevel-slider');
+      bevelSlider.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        state.bevelSoftness = val;
+        const label = val < 20 ? 'Crisp Edge' : val < 65 ? 'Smooth Chamfer' : 'Deep Rounded Fillet';
+        document.getElementById('bevel-val').textContent = label;
+        buildExtrudedLogoMeshes(state.extractedClusters);
+      });
+    }
+
+    function handleUploadedFile(file) {
+      if (!file.type.startsWith('image/')) {
+        showToast('Please upload a valid PNG, SVG, JPG, or WebP image.');
+        return;
+      }
+      state.activeSampleId = null;
+      highlightActiveSampleButton();
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        loadImageFromUrl(ev.target.result);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function rgbToHex(r, g, b) {
+      return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+    }
+
+    function showLoading(visible) {
+      const el = document.getElementById('loading-overlay');
+      if (visible) el.classList.remove('hidden');
+      else el.classList.add('hidden');
+    }
+
+    function showToast(msg) {
+      const box = document.getElementById('toast-box');
+      box.textContent = msg;
+      box.classList.remove('opacity-0');
+      box.classList.add('opacity-100');
+      setTimeout(() => {
+        box.classList.remove('opacity-100');
+        box.classList.add('opacity-0');
+      }, 2600);
+    }
+
+    function onWindowResize() {
+      const container = document.getElementById('viewport-container');
+      if (!container || !renderer || !camera) return;
+      camera.aspect = container.clientWidth / container.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(container.clientWidth, container.clientHeight);
+    }
+
+    /********************************************************************
+     * 9. RENDER LOOP & BOOTSTRAP
+     ********************************************************************/
+    const clock = new THREE.Clock();
+
+    function animateLoop() {
+      requestAnimationFrame(animateLoop);
+      const elapsed = clock.getElapsedTime();
+
+      if (logoGroup && state.autoRotate) {
+        logoGroup.rotation.y = Math.sin(elapsed * 0.65) * 0.48;
+        logoGroup.rotation.x = Math.cos(elapsed * 0.45) * 0.14;
+      }
+
+      if (controls) controls.update();
+      if (renderer && scene && camera) renderer.render(scene, camera);
+    }
+
+    window.onload = function () {
+      initThreeScene();
+      renderSampleLogosGrid();
+      renderMaterialPresetsGrid();
+      renderLightingPresetsGrid();
+      bindUIEvents();
+      // Automatically load first multi-color sample logo on startup
+      loadSampleLogo('nexus');
+    };
+  </script>
+</body>
+</html>
