@@ -11,7 +11,7 @@
 
 **Turn any 2D logo (PNG, SVG, JPG, WebP) into tactile, color-adaptive 3D vector extrusions with physically based rendering (PBR) and 1024×1024 procedural micro-textures.**
 
-[Live Demo](#quick-start) • [Features](#key-features) • [Architecture](#architecture--how-it-works) • [Material Library](#material-presets) • [Drafts & History](drafts/)
+[Live Interactive Demo](https://ketineniramarao.github.io/Third-Dimension/) • [Features](#key-features) • [Architecture](#architecture--how-it-works) • [Material Library](#material-presets) • [Drafts & History](drafts/)
 
 </div>
 
